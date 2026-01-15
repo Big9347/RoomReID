@@ -1,0 +1,8 @@
+.cache/
+samples/
+models/
+output/
+build/
+*.mkv
+*.mp4
+*.o

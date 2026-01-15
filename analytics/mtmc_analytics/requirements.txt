@@ -1,0 +1,6 @@
+kafka-python
+pydantic
+pymilvus
+numpy
+opencv-python
+PyYAML

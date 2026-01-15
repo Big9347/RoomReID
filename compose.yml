@@ -1,0 +1,185 @@
+version: '3.9'  # Use 3.9 to support `deploy` and `profiles`
+
+services:
+  # -----------------------------------
+  # 1. Kafka (no ZooKeeper, KRaft mode)
+  # -----------------------------------
+  kafka:
+    image: apache/kafka:4.0.0
+    container_name: mdx-kafka
+    network_mode: "host"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_CFG_LOG_DIRS: /var/lib/kafka/data
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-cluster.sh cluster-id --bootstrap-server localhost:9092 || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+
+  kafka-topic-init-container:
+    image: apache/kafka:4.0.0
+    container_name: mdx-kafka-topics
+    network_mode: "host"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_CFG_LOG_DIRS: /var/lib/kafka/data
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    entrypoint: ["/bin/sh", "-c"]
+    command: >
+      "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --create --if-not-exists --topic mdx-raw"
+    depends_on:
+      - kafka
+
+  # ------------------------------
+  # 2. DeepStream App
+  # ------------------------------
+  deepstream:
+    build:
+      #context: ${MDX_SAMPLE_APPS_DIR}/mtmc-app
+      dockerfile: Dockerfiles/deepstream-71.Dockerfile
+    network_mode: "host"
+    container_name: mdx-deepstream
+    deploy:
+      restart_policy:
+        condition: on-failure
+        max_attempts: 2
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+    volumes:
+      - mdx-deepstream:/opt/storage
+      - ./deepstream/mount:/opt/storage/data 
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/deepstream:/opt/storage/output
+    environment:
+      MODEL_TYPE: "transformer"
+    command: "bash ds-start.sh"
+    depends_on:
+      kafka-topic-init-container:
+        condition: service_started
+
+  # ------------------------------
+  # 3. Milvus Stack (etcd + minio + standalone)
+  # ------------------------------
+  etcd:
+    container_name: milvus-etcd
+    image: quay.io/coreos/etcd:v3.5.18
+    environment:
+      - ETCD_AUTO_COMPACTION_MODE=revision
+      - ETCD_AUTO_COMPACTION_RETENTION=1000
+      - ETCD_QUOTA_BACKEND_BYTES=4294967296
+      - ETCD_SNAPSHOT_COUNT=50000
+    volumes:
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/etcd:/etcd
+    command: etcd -advertise-client-urls=http://etcd:2379 -listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
+    healthcheck:
+      test: ["CMD", "etcdctl", "endpoint", "health"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  minio:
+    container_name: milvus-minio
+    image: minio/minio:RELEASE.2024-05-28T17-19-04Z
+    environment:
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+    ports:
+      - "9001:9001"
+      - "9000:9000"
+    volumes:
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/minio:/minio_data
+    command: minio server /minio_data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  standalone:
+    container_name: milvus-standalone
+    image: milvusdb/milvus:v2.5.14
+    command: ["milvus", "run", "standalone"]
+    security_opt:
+      - seccomp:unconfined
+    environment:
+      MINIO_REGION: us-east-1
+      ETCD_ENDPOINTS: etcd:2379
+      MINIO_ADDRESS: minio:9000
+    volumes:
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/milvus:/var/lib/milvus
+    ports:
+      - "19530:19530"
+      - "9091:9091"
+    depends_on:
+      - etcd
+      - minio
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+      interval: 30s
+      start_period: 90s
+      timeout: 20s
+      retries: 3
+
+  # ------------------------------
+  # 4. Attu (Milvus Web UI)
+  # ------------------------------
+  attu:
+    container_name: attu
+    image: zilliz/attu:v2.5
+    ports:
+      - "8000:3000"
+    environment:
+      - MILVUS_URL=standalone:19530
+    depends_on:
+      - standalone
+
+  # ------------------------------
+  # 5. Attu (Milvus Web UI)
+  # ------------------------------
+  kafka-consumer:
+    build:
+      #context: ./services/kafka-milvus  # Adjust to your actual Dockerfile location
+      dockerfile: Dockerfiles/kafka-milvus.Dockerfile
+    container_name: kafka-consumer
+    depends_on:
+      kafka-topic-init-container: 
+        condition: service_started
+      standalone:
+        condition: service_healthy
+    volumes:
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/kafka-consumer/output/:/app/output  # Store JSON dumps if needed
+    environment:
+      - PYTHONUNBUFFERED=1
+    network_mode: "host"  # Required to access Kafka at localhost:9092
+    command: "python milvus_deepstream_msgs.py --output_dir ./output"
+volumes:
+  kafka-data:
+  mdx-deepstream:
+
+networks:
+  default:
+    name: milvus

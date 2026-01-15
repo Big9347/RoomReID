@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.pyc
+venv/
+.env
+
+# Docker/Data
+volumes/
+kafka-data/
+
+# Deepstream Models (Large Files)
+deepstream/models/*.onnx
+deepstream/models/*.engine
+deepstream/mount/
+
+# Analytics Output
+analytics/output/
