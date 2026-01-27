@@ -3,7 +3,7 @@
 # RoomReID: Smart Passenger Tracking System
 
 **RoomReID** is an automated end-to-end Person Re-Identification (Re-ID) system designed for tracking and counting individuals across non-overlapping camera views. It utilizes a microservices architecture to process video streams in real-time, handling tasks such as person detection, tracking, and identity matching between Entry and Exit points.
-
+[Conference paper] - https://drive.google.com/file/d/1FZ0ARsIrLRZpFtXwIMT2mRYDh4BIADWn/view?usp=sharing
 ## 🏗 System Architecture
 
 The system is built on a modular microservices architecture orchestrated via Docker Compose:
