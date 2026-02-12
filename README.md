@@ -4,6 +4,7 @@
 
 **RoomReID** is an automated end-to-end Person Re-Identification (Re-ID) system designed for tracking and counting individuals across non-overlapping camera views. It utilizes a microservices architecture to process video streams in real-time, handling tasks such as person detection, tracking, and identity matching between Entry and Exit points.
 [Conference paper] - https://drive.google.com/file/d/1FZ0ARsIrLRZpFtXwIMT2mRYDh4BIADWn/view?usp=sharing
+<img width="866" height="343" alt="image" src="https://github.com/user-attachments/assets/71784dcb-6d31-462d-8f35-cbcb33793078" />
 ## 🏗 System Architecture
 
 The system is built on a modular microservices architecture orchestrated via Docker Compose:
@@ -30,6 +31,8 @@ The system is built on a modular microservices architecture orchestrated via Doc
 * Stores 1024-dim feature vectors.
 * Provides high-speed similarity search (HNSW index) for Re-ID.
 * Includes **Attu** (Web UI) for database visualization.
+<img width="891" height="183" alt="image" src="https://github.com/user-attachments/assets/b2a2ae4a-98fd-4f68-9842-9caf684dd696" />
+
 
 
 
