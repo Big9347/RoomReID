@@ -66,7 +66,7 @@ The repository config is set to use Transformer-based models which are **not inc
 | Model Type | File Name Required | Source |
 | --- | --- | --- |
 | **Detection** | `resnet50_peoplenet_transformer_op17.onnx` | [PeopleNet Transformer (NGC)](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/peoplenet_transformer) |
-| **Re-ID** | `reid_model_latest.onnx` | [ReIdentificationNet (NGC)](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/reidentificationnet) |
+| **Re-ID** | `reid_model_latest.onnx` | [ReIdentificationNet Transformer (NGC)](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/reidentificationnet_transformer/) |
 
 **Steps:**
 
