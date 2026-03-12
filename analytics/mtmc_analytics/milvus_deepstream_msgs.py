@@ -97,9 +97,12 @@ def extract_payloads(event_data) -> List[Dict[str, Any]]:
     elif sensorId in config.EXIT_SENSORIDS:
         direction = "Exit"
     else:
+        print(f"Skipping event: sensorId {sensorId} not in config.ENTER_SENSORIDS or EXIT_SENSORIDS")
         return payloads  # Invalid sensor ID
 
     objects = event_data.get("objects", [])
+    if not objects:
+        print("Skipping event: no objects found")
     for obj in objects:
         try:
             if not isinstance(obj, str):
@@ -189,7 +192,7 @@ try:
         consumer.poll(timeout_ms=1000)
 
     print(f"Partitions assigned: {consumer.assignment()}")
-    consumer.seek_to_end()
+    # consumer.seek_to_end()
 
     BATCH_SIZE = 1
     buffer = []
@@ -198,6 +201,7 @@ try:
     with open(all_file_path, 'w') as json_file:
         for event in consumer:
             event_data = event.value
+            print(f"Received event from topic {event.topic} partition {event.partition} offset {event.offset}")
             json_file.write(dumps(event_data) + '\n')
             
             try:

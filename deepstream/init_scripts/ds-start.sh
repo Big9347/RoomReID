@@ -12,7 +12,7 @@ elif  [[ $MODEL_TYPE == "transformer" ]]; then
          echo "##### Copying onnx-files to DS docker volume for perserving PVCs... #####"
          cp /opt/nvidia/deepstream/deepstream/sources/apps/sample_apps/deepstream-fewshot-learning-app/models/*.onnx /opt/storage/   
          cd srcs
-         CUDA_VER=12.6 make   
+         CUDA_VER=12.8 make   
          mv ./deepstream-fewshot-learning-app ..
          cd .. 
          ./deepstream-fewshot-learning-app -c ./configs/mtmc_config.txt -m 1 -t 1 -l 5 --message-rate 1 --tracker-reid 1 --reid-store-age 1

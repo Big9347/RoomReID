@@ -1,0 +1,17 @@
+ExitTrackletID,ExitImagePath,EnterTrackletID,EnterImagePath,Similarity,Category
+22,/opt/storage/output/images_cropped/camera-1_22_388_0000002453.jpg,25,/opt/storage/output/images_cropped/camera-0_25_449_0000002978.jpg,0.7882,Inside
+23,/opt/storage/output/images_cropped/camera-1_23_423_0000002749.jpg,,,0.3536,Ghost
+27,/opt/storage/output/images_cropped/camera-1_27_477_0000003277.jpg,,,0.2779,Ghost
+28,/opt/storage/output/images_cropped/camera-1_28_501_0000003501.jpg,,,0.1764,Ghost
+36,/opt/storage/output/images_cropped/camera-1_36_690_0000005076.jpg,35,/opt/storage/output/images_cropped/camera-0_35_661_0000004821.jpg,0.8609,Inside
+39,/opt/storage/output/images_cropped/camera-1_39_741_0000005466.jpg,0,/opt/storage/output/images_cropped/camera-0_0_9_0000000019.jpg,0.6536,Inside
+50,/opt/storage/output/images_cropped/camera-1_50_1111_0000007854.jpg,52,/opt/storage/output/images_cropped/camera-0_52_1132_0000008031.jpg,0.9034,Inside
+54,/opt/storage/output/images_cropped/camera-1_54_1185_0000008470.jpg,,,0.1090,Ghost
+56,/opt/storage/output/images_cropped/camera-1_56_1220_0000008784.jpg,,,0.1312,Ghost
+57,/opt/storage/output/images_cropped/camera-1_57_1258_0000009090.jpg,,,0.1462,Ghost
+59,/opt/storage/output/images_cropped/camera-1_59_1276_0000009228.jpg,,,0.1755,Ghost
+,,7,/opt/storage/output/images_cropped/camera-0_7_30_0000000164.jpg,,Missing
+,,10,/opt/storage/output/images_cropped/camera-0_10_34_0000000194.jpg,,Missing
+,,12,/opt/storage/output/images_cropped/camera-0_12_82_0000000584.jpg,,Missing
+,,13,/opt/storage/output/images_cropped/camera-0_13_213_0000001194.jpg,,Missing
+,,19,/opt/storage/output/images_cropped/camera-0_19_323_0000001877.jpg,,Missing

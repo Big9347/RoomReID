@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RoomReID - Analysis Tools</title>
+    <style>
+        body {
+            font-family: 'Inter', 'Segoe UI', sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f7fa;
+            color: #333;
+        }
+
+        header {
+            border-bottom: 2px solid #e1e4e8;
+            padding-bottom: 10px;
+            margin-bottom: 30px;
+        }
+
+        .grid-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+        }
+
+        button {
+            background-color: #4a6ee0;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 500;
+            transition: background 0.2s;
+        }
+
+        button:hover {
+            background-color: #3558c7;
+        }
+
+        button:disabled {
+            background-color: #a0aabf;
+            cursor: not-allowed;
+        }
+
+        .status {
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 4px;
+            display: none;
+        }
+
+        .status.success {
+            background-color: #e6ffed;
+            border: 1px solid #acf2bd;
+            color: #22863a;
+            display: block;
+        }
+
+        .status.error {
+            background-color: #ffeef0;
+            border: 1px solid #f9cacc;
+            color: #cb2431;
+            display: block;
+        }
+
+        .status.loading {
+            background-color: #f1f8ff;
+            border: 1px solid #c8e1ff;
+            color: #0366d6;
+            display: block;
+        }
+
+        .result-container {
+            margin-top: 20px;
+        }
+
+        .roi-image {
+            max-width: 100%;
+            height: auto;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            display: none;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        th,
+        td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+
+        th {
+            background-color: #f8f9fa;
+            font-weight: 600;
+        }
+
+        .crop-image {
+            max-width: 80px;
+            max-height: 80px;
+            object-fit: contain;
+            border: 1px solid #eee;
+            background: #fafafa;
+            border-radius: 4px;
+        }
+
+        .badge {
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .badge.inside {
+            background-color: #e6ffed;
+            color: #22863a;
+        }
+
+        .badge.ghost {
+            background-color: #fffbdd;
+            color: #b08800;
+        }
+
+        .badge.missing {
+            background-color: #ffeef0;
+            color: #cb2431;
+        }
+
+        .summary-box {
+            display: flex;
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .metric {
+            font-size: 14px;
+            color: #586069;
+        }
+
+        .metric strong {
+            color: #24292e;
+            font-size: 18px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <header>
+        <h1>RoomReID Analysis Dashboard</h1>
+    </header>
+
+    <div class="grid-container">
+        <!-- ROI Analyzer Section -->
+        <div class="card">
+            <h2>ROI Movement Analyzer</h2>
+            <p>Analyze transitions between predefined regions (Enter -> Inside, Inside -> Exit).</p>
+            <button id="btn-roi" onclick="runRoiAnalysis()">Run ROI Analysis</button>
+            <div id="roi-status" class="status"></div>
+
+            <div class="result-container" id="roi-images-container">
+                <!-- Dynamically injected images go here -->
+            </div>
+        </div>
+
+        <!-- Exit Ranking Section -->
+        <div class="card">
+            <h2>Exit Matching / Ranking</h2>
+            <p>Match exiting objects against entering objects to detect "Inside", "Ghost", or "Missing".</p>
+            <div>
+                <label for="threshold">Similarity Threshold (0.0 - 1.0):</label>
+                <input type="number" id="threshold" value="0.60" step="0.05" min="0" max="1"
+                    style="width: 60px; padding: 4px; margin-left: 5px;">
+            </div>
+            <br>
+            <button id="btn-exit" onclick="runExitRanking()">Run Exit Ranking</button>
+            <div id="exit-status" class="status"></div>
+
+            <div id="exit-summary" class="summary-box" style="display: none;">
+                <div class="metric">Inside: <strong id="cnt-inside">0</strong></div>
+                <div class="metric">Ghost: <strong id="cnt-ghost">0</strong></div>
+                <div class="metric">Missing: <strong id="cnt-missing">0</strong></div>
+            </div>
+
+            <div class="result-container" id="exit-results-container"
+                style="display: none; max-height: 400px; overflow-y: auto;">
+                <table id="exit-table">
+                    <thead>
+                        <tr>
+                            <th>Category</th>
+                            <th>Enter Crop</th>
+                            <th>Exit Crop</th>
+                            <th>Similarity</th>
+                        </tr>
+                    </thead>
+                    <tbody id="exit-table-body">
+                        <!-- Rows injected here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Configured via Flask Template variable
+        const IMAGE_SERVER = "{{ image_server_url }}";
+
+        // Helper to format image paths
+        function getServeUrl(path) {
+            if (!path) return '';
+            // Path might look like /opt/storage/output/app/images/...
+            // Or if it's already an HTTP url just return it
+            if (path.startsWith('http')) return path;
+
+            // Return full path pointing to the Nginx Image Server
+            return `${IMAGE_SERVER}${path.startsWith('/') ? '' : '/'}${path}`;
+        }
+
+        function setStatus(elId, state, message) {
+            const el = document.getElementById(elId);
+            el.className = `status ${state}`;
+            el.innerText = message;
+        }
+
+        async function runRoiAnalysis() {
+            const btn = document.getElementById('btn-roi');
+            const container = document.getElementById('roi-images-container');
+
+            btn.disabled = true;
+            container.innerHTML = '';
+            setStatus('roi-status', 'loading', 'Running ROI analysis mapping...');
+
+            try {
+                const response = await fetch('/run_roi', { method: 'POST' });
+                const data = await response.json();
+
+                if (response.ok && data.status === 'success') {
+                    setStatus('roi-status', 'success', data.message);
+
+                    if (data.images && data.images.length > 0) {
+                        data.images.forEach(imgData => {
+                            const wrapper = document.createElement('div');
+                            wrapper.style.marginBottom = '25px';
+
+                            const title = document.createElement('h3');
+                            title.innerText = imgData.name;
+                            title.style.marginTop = '0';
+                            title.style.color = '#444';
+                            title.style.borderBottom = '1px solid #eee';
+                            title.style.paddingBottom = '5px';
+                            wrapper.appendChild(title);
+
+                            const img = document.createElement('img');
+                            img.className = 'roi-image';
+                            img.src = `${imgData.url}?t=${new Date().getTime()}`; // cache buster
+                            img.alt = imgData.name;
+                            img.style.display = 'block';
+                            img.style.width = '100%';
+                            wrapper.appendChild(img);
+
+                            container.appendChild(wrapper);
+                        });
+                    } else if (data.image_url) {
+                        // Fallback to legacy single image
+                        const img = document.createElement('img');
+                        img.className = 'roi-image';
+                        img.src = `${data.image_url}?t=${new Date().getTime()}`;
+                        img.alt = 'ROI Analysis Result';
+                        img.style.display = 'block';
+                        img.style.width = '100%';
+                        container.appendChild(img);
+                    }
+
+                } else {
+                    setStatus('roi-status', 'error', data.message || 'Failed to run analysis');
+                }
+            } catch (e) {
+                setStatus('roi-status', 'error', `Network error: ${e.message}`);
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        async function runExitRanking() {
+            const btn = document.getElementById('btn-exit');
+            const tbody = document.getElementById('exit-table-body');
+            const summaryBox = document.getElementById('exit-summary');
+            const resultsContainer = document.getElementById('exit-results-container');
+            const threshold = parseFloat(document.getElementById('threshold').value) || 0.60;
+
+            btn.disabled = true;
+            summaryBox.style.display = 'none';
+            resultsContainer.style.display = 'none';
+            tbody.innerHTML = '';
+
+            setStatus('exit-status', 'loading', 'Calculating vector similarities...');
+
+            try {
+                const response = await fetch('/run_exit_ranking', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ threshold: threshold })
+                });
+                const data = await response.json();
+
+                if (response.ok && data.status === 'success') {
+                    setStatus('exit-status', 'success', 'Ranking completed successfully.');
+
+                    // Update Summary
+                    document.getElementById('cnt-inside').innerText = data.summary.inside;
+                    document.getElementById('cnt-ghost').innerText = data.summary.ghost;
+                    document.getElementById('cnt-missing').innerText = data.summary.missing;
+                    summaryBox.style.display = 'flex';
+
+                    // Render Table Matches
+                    const allRows = [...data.matches];
+
+                    // Format Missing list to match table structure
+                    data.missing.forEach(m => {
+                        allRows.push({
+                            category: "Missing",
+                            similarity: -1.0,
+                            exit_image_path: null,
+                            matched_enter_image_path: m.enter_image_path
+                        });
+                    });
+
+                    // Sort to group by category Inside > Ghost > Missing
+                    const catWeight = { "Inside": 1, "Ghost": 2, "Missing": 3 };
+                    allRows.sort((a, b) => catWeight[a.category] - catWeight[b.category]);
+
+                    allRows.forEach(row => {
+                        const tr = document.createElement('tr');
+
+                        // Badge
+                        const badgeClass = row.category.toLowerCase();
+                        const tdCat = document.createElement('td');
+                        tdCat.innerHTML = `<span class="badge ${badgeClass}">${row.category}</span>`;
+
+                        // Enter Image (Source)
+                        const tdEnter = document.createElement('td');
+                        if (row.matched_enter_image_path) {
+                            const url = getServeUrl(row.matched_enter_image_path);
+                            tdEnter.innerHTML = `<img class="crop-image" src="${url}" alt="Enter" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iI2YwZjBmMCIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBkeT0iLjNlbSIgZmlsbD0iI2FhYSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+T0xEPC90ZXh0Pjwvc3ZnPg=='">`;
+                        } else {
+                            tdEnter.innerText = '-';
+                        }
+
+                        // Exit Image (Destination)
+                        const tdExit = document.createElement('td');
+                        if (row.exit_image_path) {
+                            const url = getServeUrl(row.exit_image_path);
+                            tdExit.innerHTML = `<img class="crop-image" src="${url}" alt="Exit" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iI2YwZjBmMCIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBkeT0iLjNlbSIgZmlsbD0iI2FhYSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+T0xEPC90ZXh0Pjwvc3ZnPg=='">`;
+                        } else {
+                            tdExit.innerText = '-';
+                        }
+
+                        // Similarity
+                        const tdSim = document.createElement('td');
+                        tdSim.innerText = row.similarity >= 0 ? row.similarity.toFixed(4) : '-';
+
+                        tr.appendChild(tdCat);
+                        tr.appendChild(tdEnter);
+                        tr.appendChild(tdExit);
+                        tr.appendChild(tdSim);
+
+                        tbody.appendChild(tr);
+                    });
+
+                    resultsContainer.style.display = 'block';
+
+                } else {
+                    setStatus('exit-status', 'error', data.message || 'Failed to run ranking');
+                }
+            } catch (e) {
+                setStatus('exit-status', 'error', `Network error: ${e.message}`);
+            } finally {
+                btn.disabled = false;
+            }
+        }
+    </script>
+</body>
+
+</html>

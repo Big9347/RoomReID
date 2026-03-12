@@ -61,7 +61,7 @@ def get_exit_vectors(client: MilvusClient, collection_name: str) -> list[dict]:
     results = client.query(
         collection_name=collection_name,
         filter=filter_expr,
-        output_fields=["id", "timestamp", "trackingId", "embedding"],
+        output_fields=["id", "timestamp", "trackingId", "embedding", "imgPath"],
         limit=10000  # Adjust based on your data size
     )
     
@@ -94,7 +94,7 @@ def find_matching_enter(client: MilvusClient, collection_name: str, exit_timesta
             search_params=search_params,
             limit=1,
             filter=filter_expr,
-            output_fields=["timestamp", "trackingId", "direction"]
+            output_fields=["timestamp", "trackingId", "direction", "imgPath"]
         )
         
         if results and len(results[0]) > 0:
@@ -103,7 +103,8 @@ def find_matching_enter(client: MilvusClient, collection_name: str, exit_timesta
                 'timestamp': match['entity']['timestamp'],
                 'trackingId': match['entity']['trackingId'],
                 'direction': match['entity']['direction'],
-                'distance': match['distance']
+                'distance': match['distance'],
+                'imgPath': match['entity'].get('imgPath', '')
             }
     except Exception as e:
         print(f"Error in vector search: {e}")
@@ -120,12 +121,14 @@ def process_exit_vectors(client: MilvusClient, collection_name : str, exit_vecto
         exit_trackletid = exit_vector['trackingId']
         exit_timestamp = exit_vector['timestamp']
         exit_embedding = exit_vector['embedding']
+        exit_image_path = exit_vector.get('imgPath', '')
         
         match = find_matching_enter(client, collection_name, exit_timestamp, exit_embedding, used_enter_trackletids)
         
         if match:
             similarity = abs(match['distance'])
             matched_trackletid = match['trackingId']
+            matched_image_path = match.get('imgPath', '')
             
             if similarity >= similarity_threshold:
                 category = "Inside"
@@ -134,17 +137,22 @@ def process_exit_vectors(client: MilvusClient, collection_name : str, exit_vecto
             else:
                 category = "Ghost"
                 matched_trackletid = None
+                matched_image_path = None
             
             results.append({
                 "exit_trackletid": exit_trackletid,
+                "exit_image_path": exit_image_path,
                 "matched_enter_trackletid": matched_trackletid,
+                "matched_enter_image_path": matched_image_path,
                 "similarity": similarity,
                 "category": category
             })
         else:
             results.append({
                 "exit_trackletid": exit_trackletid,
+                "exit_image_path": exit_image_path,
                 "matched_enter_trackletid": None,
+                "matched_enter_image_path": None,
                 "similarity": -1.0,
                 "category": "Ghost"
             })
@@ -158,71 +166,88 @@ def get_missing_enter_trackletids(client, collection_name, matched_enter_trackle
     results = client.query(
         collection_name=collection_name,
         filter=filter_expr,
-        output_fields=["trackingId"],
+        output_fields=["trackingId", "imgPath"],
         limit=10000
     )
     
-    all_enter_trackletids = {result['trackingId'] for result in results}
-    return all_enter_trackletids - matched_enter_trackletids
+    # Needs to return detailed missing objects
+    all_enters = {result['trackingId']: result for result in results}
+    missing_ids = set(all_enters.keys()) - matched_enter_trackletids
+    
+    missing_details = []
+    for m_id in missing_ids:
+        missing_details.append({
+            "enter_trackletid": m_id,
+            "enter_image_path": all_enters[m_id].get('imgPath', '')
+        })
+        
+    return missing_ids, missing_details
 
-def save_results_to_csv(results, missing_enter_trackletids, filename="matching_results.csv"):
+def save_results_to_csv(results, missing_details, filename="matching_results.csv"):
     """Save results to CSV file"""
     with open(filename, mode='w', newline='') as file:
         writer = csv.writer(file)
-        writer.writerow(["ExitTrackletID", "EnterTrackletID", "Similarity", "Category"])
+        writer.writerow(["ExitTrackletID", "ExitImagePath", "EnterTrackletID", "EnterImagePath", "Similarity", "Category"])
         
         for res in results:
             writer.writerow([
                 res['exit_trackletid'], 
+                res['exit_image_path'],
                 res['matched_enter_trackletid'], 
+                res['matched_enter_image_path'],
                 f"{res['similarity']:.4f}", 
                 res['category']
             ])
         
-        for missing_id in missing_enter_trackletids:
-            writer.writerow([None, missing_id, None, "Missing"])
+        for missing in missing_details:
+            writer.writerow([None, None, missing['enter_trackletid'], missing['enter_image_path'], None, "Missing"])
 
-def main():
-    args = parse_arguments()
-    app_config = load_config()
+def run_exit_ranking(threshold=0.60, app_config=None):
+    """Callable endpoint for the web UI that returns JSON results"""
+    if app_config is None:
+        app_config = load_config()
     client = setup_milvus_client(app_config.DEFAULT_SQL_DB)
     
     try:
-        # Ensure collection exists
         check_collection_if_not_exists(client, app_config.COLLECTION_NAME)
-        
-        # Get exit vectors
         exit_vectors = get_exit_vectors(client, app_config.COLLECTION_NAME)
-        print(f"Found {len(exit_vectors)} exit vectors")
-        
-        # Process exit vectors and find matches
         results, matched_enter_trackletids = process_exit_vectors(
-            client, app_config.COLLECTION_NAME, exit_vectors, 0.60
+            client, app_config.COLLECTION_NAME, exit_vectors, threshold
         )
-        
-        # Get missing enter trackletids
-        missing_enter_trackletids = get_missing_enter_trackletids(
+        missing_enter_trackletids, missing_details = get_missing_enter_trackletids(
             client, app_config.COLLECTION_NAME, matched_enter_trackletids
         )
         
-        # Save results
-        save_results_to_csv(results, missing_enter_trackletids)
-        print("Results have been saved to matching_results.csv.")
+        save_results_to_csv(results, missing_details)
         
-        # Print summary
         inside_count = sum(1 for r in results if r['category'] == 'Inside')
         ghost_count = sum(1 for r in results if r['category'] == 'Ghost')
         missing_count = len(missing_enter_trackletids)
         
-        print(f"\nSummary:")
-        print(f"Inside: {inside_count}")
-        print(f"Ghost: {ghost_count}")
-        print(f"Missing: {missing_count}")
+        return {
+            "status": "success",
+            "summary": {
+                "inside": inside_count,
+                "ghost": ghost_count,
+                "missing": missing_count
+            },
+            "matches": results,
+            "missing": missing_details
+        }
         
     except Exception as e:
         print(f"Error: {e}")
+        return {"status": "error", "message": str(e)}
     finally:
         client.close()
+
+def main():
+    args = parse_arguments()
+    res = run_exit_ranking(args.threshold)
+    if res["status"] == "success":
+        print(f"Results saved. Summary: Inside={res['summary']['inside']}, Ghost={res['summary']['ghost']}, Missing={res['summary']['missing']}")
+    else:
+        print(f"Failed: {res['message']}")
 
 if __name__ == "__main__":
     main()

@@ -189,7 +189,8 @@ class ROIAnalyzer:
         
         image = cv2.imread(mode_config.background_image)
         if image is None:
-            raise FileNotFoundError(f"Could not load image: {mode_config.background_image}")
+            print(f"Warning: Could not load image {mode_config.background_image}. Using blank canvas.")
+            image = np.zeros((1080, 1920, 3), dtype=np.uint8)
         
         # Draw ROIs
         roi1 = np.array(mode_config.roi1, dtype=np.int32)
@@ -240,7 +241,8 @@ class ROIAnalyzer:
         
         image = cv2.imread(mode_config.background_image)
         if image is None:
-            raise FileNotFoundError(f"Could not load image: {mode_config.background_image}")
+            print(f"Warning: Could not load image {mode_config.background_image}. Using blank canvas.")
+            image = np.zeros((1080, 1920, 3), dtype=np.uint8)
         
         # Draw ROIs
         roi1 = np.array(mode_config.roi1, dtype=np.int32)
@@ -288,7 +290,8 @@ class ROIAnalyzer:
         
         image = cv2.imread(first_mode_config.background_image)
         if image is None:
-            raise FileNotFoundError(f"Could not load image: {first_mode_config.background_image}")
+            print(f"Warning: Could not load image {first_mode_config.background_image}. Using blank canvas.")
+            image = np.zeros((1080, 1920, 3), dtype=np.uint8)
         
         # Draw ROIs for the first mode
         roi1 = np.array(first_mode_config.roi1, dtype=np.int32)
@@ -421,9 +424,10 @@ class ROIAnalyzer:
                 print("Warning No Transit Id")
                 continue
             represent_frames = dirResult.dict_transitid_representframeid
+            formatted_ids = [int(tid) for tid in dirResult.transit_ids]
             iterator = client.query_iterator(
                         collection_name = app_config.COLLECTION_NAME,
-                        filter=f'trackingId in {dirResult.transit_ids}',
+                        filter=f'trackingId in {formatted_ids}',
                         output_fields=['*']
                         )
             results = []

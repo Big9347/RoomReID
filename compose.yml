@@ -1,4 +1,4 @@
-version: '3.9'  # Use 3.9 to support `deploy` and `profiles`
+version: '3.9' # Use 3.9 to support `deploy` and `profiles`
 
 services:
   # -----------------------------------
@@ -23,7 +23,7 @@ services:
     volumes:
       - kafka-data:/var/lib/kafka/data
     healthcheck:
-      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-cluster.sh cluster-id --bootstrap-server localhost:9092 || exit 1"]
+      test: [ "CMD-SHELL", "/opt/kafka/bin/kafka-cluster.sh cluster-id --bootstrap-server localhost:9092 || exit 1" ]
       interval: 15s
       timeout: 10s
       retries: 5
@@ -47,7 +47,7 @@ services:
       KAFKA_CFG_LOG_DIRS: /var/lib/kafka/data
     volumes:
       - kafka-data:/var/lib/kafka/data
-    entrypoint: ["/bin/sh", "-c"]
+    entrypoint: [ "/bin/sh", "-c" ]
     command: >
       "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --create --if-not-exists --topic mdx-raw"
     depends_on:
@@ -59,7 +59,7 @@ services:
   deepstream:
     build:
       #context: ${MDX_SAMPLE_APPS_DIR}/mtmc-app
-      dockerfile: Dockerfiles/deepstream-71.Dockerfile
+      dockerfile: Dockerfiles/deepstream-80.Dockerfile
     network_mode: "host"
     container_name: mdx-deepstream
     deploy:
@@ -69,13 +69,15 @@ services:
       resources:
         reservations:
           devices:
-            - capabilities: [gpu]
+            - capabilities: [ gpu ]
     volumes:
       - mdx-deepstream:/opt/storage
-      - ./deepstream/mount:/opt/storage/data 
+      - ./deepstream/mount:/opt/storage/data
       - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/deepstream:/opt/storage/output
+      - /tmp/.X11-unix:/tmp/.X11-unix
     environment:
       MODEL_TYPE: "transformer"
+      DISPLAY: ${DISPLAY:-:0}
     command: "bash ds-start.sh"
     depends_on:
       kafka-topic-init-container:
@@ -96,7 +98,7 @@ services:
       - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/etcd:/etcd
     command: etcd -advertise-client-urls=http://etcd:2379 -listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
     healthcheck:
-      test: ["CMD", "etcdctl", "endpoint", "health"]
+      test: [ "CMD", "etcdctl", "endpoint", "health" ]
       interval: 30s
       timeout: 20s
       retries: 3
@@ -114,7 +116,7 @@ services:
       - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/minio:/minio_data
     command: minio server /minio_data --console-address ":9001"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
       interval: 30s
       timeout: 20s
       retries: 3
@@ -122,7 +124,7 @@ services:
   standalone:
     container_name: milvus-standalone
     image: milvusdb/milvus:v2.5.14
-    command: ["milvus", "run", "standalone"]
+    command: [ "milvus", "run", "standalone" ]
     security_opt:
       - seccomp:unconfined
     environment:
@@ -138,7 +140,7 @@ services:
       - etcd
       - minio
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+      test: [ "CMD", "curl", "-f", "http://localhost:9091/healthz" ]
       interval: 30s
       start_period: 90s
       timeout: 20s
@@ -166,19 +168,53 @@ services:
       dockerfile: Dockerfiles/kafka-milvus.Dockerfile
     container_name: kafka-consumer
     depends_on:
-      kafka-topic-init-container: 
+      kafka-topic-init-container:
         condition: service_started
       standalone:
         condition: service_healthy
     volumes:
-      - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/kafka-consumer/output/:/app/output  # Store JSON dumps if needed
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/kafka-consumer/output/:/app/output # Store JSON dumps if needed
     environment:
       - PYTHONUNBUFFERED=1
-    network_mode: "host"  # Required to access Kafka at localhost:9092
+    network_mode: "host" # Required to access Kafka at localhost:9092
     command: "python milvus_deepstream_msgs.py --output_dir ./output"
+
+  # ------------------------------
+  # Web UI (Flask Application)
+  # ------------------------------
+  web-ui:
+    build:
+      dockerfile: Dockerfiles/flask-webui.Dockerfile
+    container_name: mdx-web-ui
+    network_mode: "host"
+    environment:
+      - IMAGE_SERVER_URL=http://localhost:8080
+      - PYTHONPATH=/app/mtmc_analytics
+    volumes:
+      - ./analytics:/app
+      # Make sure the UI has access to where the images get generated
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/deepstream:/opt/storage/output
+    depends_on:
+      standalone:
+        condition: service_healthy
+
+  # ------------------------------
+  # 6. Image Access Server (Nginx)
+  # ------------------------------
+  image-server:
+    image: nginx:alpine
+    container_name: mdx-image-server
+    ports:
+      - "8080:80"
+    volumes:
+      # Map the same host volume to Nginx's web root, maintaining the exact path structure
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/deepstream:/usr/share/nginx/html/opt/storage/output:ro
+    restart: unless-stopped
+
 volumes:
   kafka-data:
   mdx-deepstream:
+
 
 networks:
   default:

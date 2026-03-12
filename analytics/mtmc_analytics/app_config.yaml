@@ -1,6 +1,6 @@
-BASE_PATH: "./mtmc_analytics"
+BASE_PATH: "."
 REID_FEATURE_DIM: 1024
-ENTER_SENSORIDS: ['Enter']
-EXIT_SENSORIDS: ['Exit']
+ENTER_SENSORIDS: ['stream1']
+EXIT_SENSORIDS: ['stream2']
 ROI_CONFIG_PATH: "./roi_config.yaml"
 COLLECTION_NAME: "mar6"
